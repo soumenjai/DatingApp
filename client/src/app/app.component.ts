@@ -13,10 +13,6 @@ export class AppComponent implements OnInit {
   constructor(private service: UserService) {}
 
   ngOnInit(): void {
-    this.service.getUsers().subscribe(response => {
-      this.users = response;
-    }, error => {
-      console.log(error);
-    });
+
   }
 }
