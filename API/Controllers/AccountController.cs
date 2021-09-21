@@ -6,6 +6,7 @@ using API.Data;
 using API.DTOs;
 using API.Entities;
 using API.Interfaces;
+using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,40 +16,41 @@ namespace API.Controllers
     {
         private readonly DataContext _context;
         private readonly ITokenService _tokenService;
-        public AccountController(DataContext context, ITokenService tokenService)
+        private readonly IMapper _mapper;
+        public AccountController(DataContext context, ITokenService tokenService, IMapper mapper)
         {
+            _mapper = mapper;
             _tokenService = tokenService;
             _context = context;
         }
 
         [HttpPost("register")]
-        public async Task<ActionResult<UserDto>> Register([FromBody]RegisterDto registerdto)
+        public async Task<ActionResult<UserDto>> Register([FromBody] RegisterDto registerdto)
         {
             if (await UserExist(registerdto.Username))
             {
                 return BadRequest("Username is taken");
             }
-
+            var user = _mapper.Map<AppUser>(registerdto);
             using var hmac = new HMACSHA512();
-
-            var user = new AppUser
-            {
-                UserName = registerdto.Username.ToLower(),
-                PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(registerdto.Password)),
-                PasswordSalt = hmac.Key
-            };
+            user.UserName = registerdto.Username.ToLower();
+            user.PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(registerdto.Password));
+            user.PasswordSalt = hmac.Key;
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            return new UserDto {
+            return new UserDto
+            {
                 Username = user.UserName,
-                Token = _tokenService.CreateToken(user)
+                Token = _tokenService.CreateToken(user),
+                KnownAs = user.KnownAs,
+                Gender = user.Gender
             };
         }
 
         [HttpPost("login")]
-        public async Task<ActionResult<UserDto>> Login([FromBody]LoginDto loginDto)
+        public async Task<ActionResult<UserDto>> Login(LoginDto loginDto)
         {
             var user = await _context.Users
             .Include(p => p.Photos)
@@ -65,10 +67,13 @@ namespace API.Controllers
                     return Unauthorized("Invalid Password");
             }
 
-            return new UserDto {
+            return new UserDto
+            {
                 Username = user.UserName,
                 Token = _tokenService.CreateToken(user),
-                PhotoUrl = user.Photos.FirstOrDefault(x => x.IsMain)?.Url
+                PhotoUrl = user.Photos.FirstOrDefault(x => x.IsMain)?.Url,
+                KnownAs = user.KnownAs,
+                Gender = user.Gender
             };
         }
 
